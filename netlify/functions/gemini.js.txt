@@ -1,0 +1,51 @@
+// netlify/functions/gemini.js
+const fetch = require('node-fetch');
+
+exports.handler = async function(event) {
+  // دوست جادویی کلید مخفی را از Netlify می‌گیرد
+  const { API_KEY } = process.env;
+
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method Not Allowed" };
+  }
+
+  try {
+    const { modelName, contents, generationConfig } = JSON.parse(event.body);
+
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
+
+    const payload = {
+      contents: contents,
+      generationConfig: generationConfig
+    };
+
+    const geminiResponse = await fetch(geminiApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!geminiResponse.ok) {
+      const errorData = await geminiResponse.json().catch(() => ({ error: { message: `Gemini API request failed with status ${geminiResponse.status}` } }));
+      console.error("Gemini API Error from function:", errorData.error?.message, errorData);
+      throw new Error(errorData.error?.message || `Gemini API request failed with status ${geminiResponse.status}`);
+    }
+
+    const responseData = await geminiResponse.json();
+    // متن جواب Gemini اینجاست
+    const textOutput = responseData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    return {
+      statusCode: 200,
+      // جواب را به اپلیکیشن اصلی می‌فرستد
+      body: JSON.stringify({ geminiTextOutput: textOutput })
+    };
+
+  } catch (error) {
+    console.error("Error in Netlify Gemini function:", error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: error.message || "Failed to process request in Gemini function." })
+    };
+  }
+};
